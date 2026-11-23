@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-HK">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>香港小學數學（小三）：互動天平模擬器</title>
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 載入 Noto Sans TC 繁體中文字型 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background-color: #FFFDF7;
+      background-image:
+        linear-gradient(to right, rgba(226, 232, 240, 0.55) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(226, 232, 240, 0.55) 1px, transparent 1px);
+      background-size: 28px 28px;
+      color: #1E293B;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+
+    /* 橫向課室電子白板（Landscape 桌面與平板 min-width: 768px）採用 100dvh 免捲動滿版佈局 */
+    @media (min-width: 768px) and (orientation: landscape) {
+      body {
+        height: 100dvh;
+        overflow: hidden;
+      }
+    }
+
+    /* 天平橫樑與指針平滑彈簧物理轉動 */
+    .scale-beam {
+      transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transform-origin: 300px 92px;
+    }
+    .scale-pointer {
+      transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+      transform-origin: 300px 92px;
+    }
+    /* 左右托盤跟隨橫樑端點平移但保持垂直不傾斜 */
+    .pan-assembly {
+      transition: transform 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    /* 物件放入與彈出動畫 */
+    @keyframes popIn {
+      0% { transform: scale(0.35) translateY(-14px); opacity: 0; }
+      75% { transform: scale(1.08) translateY(2px); opacity: 1; }
+      100% { transform: scale(1) translateY(0); opacity: 1; }
+    }
+    .animate-pop {
+      animation: popIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    /* 拖放感應區高亮發光 */
+    .drop-active {
+      filter: drop-shadow(0 0 12px rgba(37, 99, 235, 0.85));
+    }
+
+    /* 觸控拖曳懸浮分身 */
+    #touch-drag-ghost {
+      position: fixed;
+      pointer-events: none;
+      z-index: 9999;
+      transform: translate(-50%, -50%) scale(1.15);
+      filter: drop-shadow(0 12px 16px rgba(15, 23, 42, 0.25));
+    }
+  </style>
+</head>
+<body class="min-h-[100dvh] flex flex-col justify-between text-[#1E293B]">
+
+  <!-- ==================== 頂部導覽列：左上方音效與背景音樂開關 + 中央分頁切換 ==================== -->
+  <header class="bg-emerald-800 text-white shadow-md border-b-4 border-amber-500 px-3 sm:px-6 py-2 shrink-0 z-30">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      
+      <!-- 左上方：獨立「音效：開/關」與「背景音樂：開/關」按鈕 -->
+      <div class="flex items-center gap-2">
+        <button id="sfx-toggle-btn" onclick="toggleSFX()" aria-label="切換音效"
+          class="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl bg-amber-400 hover:bg-amber-300 active:scale-95 text-emerald-950 font-black text-xs sm:text-sm shadow-md border-b-4 border-amber-600 flex items-center gap-1.5 cursor-pointer transition">
+          <span id="sfx-icon" class="text-base">🔊</span>
+          <span id="sfx-text">音效：開</span>
+        </button>
+
+        <button id="bgm-toggle-btn" onclick="toggleBGM()" aria-label="切換背景音樂"
+          class="px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl bg-sky-300 hover:bg-sky-200 active:scale-95 text-sky-950 font-black text-xs sm:text-sm shadow-md border-b-4 border-sky-500 flex items-center gap-1.5 cursor-pointer transition">
+          <span id="bgm-icon" class="text-base">🎵</span>
+          <span id="bgm-text">背景音樂：開</span>
+        </button>
+      </div>
+
+      <!-- 中央分頁切換 -->
+      <nav class="flex bg-emerald-950/75 p-1 rounded-2xl gap-1.5 w-full sm:w-auto justify-center order-3 sm:order-2" role="tablist">
+        <button id="tab-1" onclick="switchPage(1)" role="tab" aria-selected="true"
+          class="flex-1 sm:flex-initial px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-xl font-black text-xs sm:text-sm lg:text-base transition bg-white text-emerald-900 shadow-sm cursor-pointer">
+          第一部分：比較輕重
+        </button>
+        <button id="tab-2" onclick="switchPage(2)" role="tab" aria-selected="false"
+          class="flex-1 sm:flex-initial px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-xl font-black text-xs sm:text-sm lg:text-base transition text-emerald-100 hover:bg-emerald-800 cursor-pointer">
+          第二部分：自訂單位量度
+        </button>
+      </nav>
+
+      <!-- 右上方課程標示 -->
+      <div class="hidden md:flex items-center gap-2 order-2 sm:order-3">
+        <span class="font-black text-sm lg:text-base tracking-wide text-amber-200">互動天平模擬器・小三重量</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 第一部分：比較輕重 ==================== -->
+  <main id="page-1" class="flex-1 flex flex-col justify-between max-w-7xl w-full mx-auto px-3 sm:px-6 py-2 sm:py-2.5 gap-2 overflow-y-auto lg:overflow-hidden">
+    
+    <!-- 中性操作引導語（未按「顯示答案」前，絕不提供任何上升較輕、下降較重或公認單位 g 的線索） -->
+    <div class="bg-white/95 rounded-2xl px-4 py-2 shadow-xs border-2 border-amber-200 flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
+      <p class="text-sm sm:text-base lg:text-lg font-bold text-[#1E293B] text-center sm:text-left">
+        👩‍🏫 <span class="text-emerald-800 font-black">操作提示：</span>請點選或拖拉兩個物件放到天平兩邊，觀察天平的變化！
+      </p>
+      <span id="p1-status-badge" class="text-xs sm:text-sm font-black bg-amber-100 text-amber-950 px-3 py-1 rounded-full shrink-0">
+        左盤：空 ｜ 右盤：空（請點選第一個物件放左盤）
+      </span>
+    </div>
+
+    <!-- 正中央舞台：天平在畫面正中央 -->
+    <div class="flex-1 bg-white rounded-3xl p-2 sm:p-4 shadow-lg border-4 border-amber-300 flex flex-col items-center justify-center relative min-h-[245px]">
+      
+      <!-- 老師教學解說卡（預設隱藏，僅當按下「顯示答案」時才彈出） -->
+      <div id="p1-answer-box" class="hidden w-full max-w-4xl mb-1 py-2.5 px-4 rounded-2xl bg-indigo-50 border-2 border-indigo-400 text-indigo-950 text-center font-black text-base sm:text-lg lg:text-xl shadow-sm animate-pop z-10">
+      </div>
+
+      <!-- 正中央 SVG 天平 -->
+      <div class="w-full max-w-2xl flex-1 flex items-center justify-center max-h-[285px] sm:max-h-[340px]">
+        <svg id="p1-svg" viewBox="0 0 600 295" class="w-full h-full max-h-[335px] overflow-visible">
+          <defs>
+            <linearGradient id="woodBase" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#d97706"/>
+              <stop offset="100%" stop-color="#92400e"/>
+            </linearGradient>
+            <linearGradient id="steelPillar" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#64748b"/>
+              <stop offset="50%" stop-color="#e2e8f0"/>
+              <stop offset="100%" stop-color="#475569"/>
+            </linearGradient>
+            <linearGradient id="goldPan" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#fde047"/>
+              <stop offset="100%" stop-color="#d97706"/>
+            </linearGradient>
+          </defs>
+
+          <!-- 底座與中央支柱 -->
+          <ellipse cx="300" cy="282" rx="175" ry="10" fill="rgba(120, 53, 15, 0.14)"/>
+          <rect x="175" y="258" width="250" height="22" rx="9" fill="url(#woodBase)" stroke="#78350f" stroke-width="2"/>
+          <rect x="215" y="244" width="170" height="15" rx="6" fill="#b45309" stroke="#78350f" stroke-width="2"/>
+          <rect x="288" y="88" width="24" height="157" rx="4" fill="url(#steelPillar)" stroke="#334155" stroke-width="2"/>
+
+          <!-- 中央刻度盤與平衡對齊標記 -->
+          <path d="M 255 138 A 48 48 0 0 1 345 138" fill="#f8fafc" stroke="#475569" stroke-width="2.5"/>
+          <line id="p1-center-mark" x1="300" y1="95" x2="300" y2="109" stroke="#10b981" stroke-width="4" stroke-linecap="round"/>
+          <line x1="272" y1="103" x2="278" y2="113" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+          <line x1="328" y1="103" x2="322" y2="113" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+
+          <!-- 可旋轉橫樑 -->
+          <g id="p1-beam" class="scale-beam">
+            <rect x="115" y="85" width="370" height="14" rx="7" fill="url(#steelPillar)" stroke="#334155" stroke-width="2"/>
+            <circle cx="130" cy="92" r="6" fill="#f59e0b" stroke="#78350f" stroke-width="2"/>
+            <circle cx="470" cy="92" r="6" fill="#f59e0b" stroke="#78350f" stroke-width="2"/>
+          </g>
+
+          <!-- 紅色指針與中央支點軸承 -->
+          <g id="p1-pointer" class="scale-pointer">
+            <polygon points="300,92 294,135 300,141 306,135" fill="#ef4444" stroke="#991b1b" stroke-width="1.5"/>
+          </g>
+          <circle cx="300" cy="92" r="11" fill="#fbbf24" stroke="#78350f" stroke-width="2.5"/>
+          <circle cx="300" cy="92" r="4" fill="#78350f"/>
+
+          <!-- 左托盤組（跟隨橫樑端點精確平移，懸吊桿與托盤永遠保持垂直正立） -->
+          <g id="p1-left-pan" class="pan-assembly"
+             ondragover="onDragOver(event, 'left')" ondragleave="onDragLeave('left')" ondrop="onDrop(event, 'left')">
+            <rect id="p1-left-zone" x="40" y="90" width="180" height="135" rx="22" fill="rgba(59, 130, 246, 0.04)" stroke="#93c5fd" stroke-width="2" stroke-dasharray="6 4" class="transition-all"/>
+            <line x1="130" y1="92" x2="70" y2="195" stroke="#64748b" stroke-width="2.5"/>
+            <line x1="130" y1="92" x2="190" y2="195" stroke="#64748b" stroke-width="2.5"/>
+            <g id="p1-left-slot" transform="translate(130, 162)"></g>
+            <path d="M 55 195 Q 130 220 205 195 Z" fill="url(#goldPan)" stroke="#92400e" stroke-width="2.5"/>
+            <rect x="50" y="191" width="160" height="7" rx="3.5" fill="#fef08a" stroke="#92400e" stroke-width="2"/>
+            <text x="130" y="222" text-anchor="middle" font-size="14" font-weight="900" fill="#78350f">左盤</text>
+          </g>
+
+          <!-- 右托盤組（跟隨橫樑端點精確平移，懸吊桿與托盤永遠保持垂直正立） -->
+          <g id="p1-right-pan" class="pan-assembly"
+             ondragover="onDragOver(event, 'right')" ondragleave="onDragLeave('right')" ondrop="onDrop(event, 'right')">
+            <rect id="p1-right-zone" x="380" y="90" width="180" height="135" rx="22" fill="rgba(59, 130, 246, 0.04)" stroke="#93c5fd" stroke-width="2" stroke-dasharray="6 4" class="transition-all"/>
+            <line x1="470" y1="92" x2="410" y2="195" stroke="#64748b" stroke-width="2.5"/>
+            <line x1="470" y1="92" x2="530" y2="195" stroke="#64748b" stroke-width="2.5"/>
+            <g id="p1-right-slot" transform="translate(470, 162)"></g>
+            <path d="M 395 195 Q 470 220 545 195 Z" fill="url(#goldPan)" stroke="#92400e" stroke-width="2.5"/>
+            <rect x="390" y="191" width="160" height="7" rx="3.5" fill="#fef08a" stroke="#92400e" stroke-width="2"/>
+            <text x="470" y="222" text-anchor="middle" font-size="14" font-weight="900" fill="#78350f">右盤</text>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- 下方電子白板大按鈕區：僅保留 5 個物件卡片、兩邊放滿時才出現的「顯示答案」按鈕，以及「清空天平」按鈕 -->
+    <div class="bg-amber-100/95 rounded-3xl p-2.5 sm:p-3.5 shadow-md border-2 border-amber-300 shrink-0 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5">
+      
+      <!-- 5 個日常物件卡片（不設放左邊/放右邊按鈕，不顯示克數） -->
+      <div id="p1-tray" class="flex-1 grid grid-cols-5 gap-1.5 sm:gap-3">
+        <!-- JS 動態生成 5 個物件卡片 -->
+      </div>
+
+      <!-- 右側功能按鈕：「顯示答案」（僅在左右兩盤皆放有物件時顯示） + 「清空天平」 -->
+      <div class="flex flex-row lg:flex-col gap-2 shrink-0 justify-center">
+        <button id="p1-reveal-btn" onclick="revealPage1Answer()"
+          class="hidden flex-1 lg:flex-initial px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-black text-base sm:text-lg shadow-md border-b-4 border-indigo-800 items-center justify-center gap-2 cursor-pointer transition animate-pop">
+          <span>💡</span>
+          <span>顯示答案</span>
+        </button>
+
+        <button onclick="resetPage1()"
+          class="flex-1 lg:flex-initial px-5 py-3 rounded-2xl bg-rose-500 hover:bg-rose-400 active:scale-95 text-white font-black text-base sm:text-lg shadow-md border-b-4 border-rose-700 flex items-center justify-center gap-2 cursor-pointer transition">
+          <span>🔄</span>
+          <span>清空天平</span>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ==================== 第二部分：自訂單位量度 ==================== -->
+  <section id="page-2" class="hidden flex-1 flex-col justify-between max-w-7xl w-full mx-auto px-3 sm:px-6 py-2 sm:py-2.5 gap-2 overflow-y-auto lg:overflow-hidden">
+    
+    <!-- 上方學習指引 -->
+    <div class="bg-white/95 rounded-2xl px-4 py-2 shadow-xs border-2 border-emerald-200 flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
+      <p class="text-sm sm:text-base lg:text-lg font-bold text-[#1E293B] text-center sm:text-left">
+        📏 <span class="text-emerald-800 font-black">任務：</span>選擇適當的自訂單位（每次一款），逐個加入右盤直到天平平衡！
+      </p>
+      <span id="p2-unit-badge" class="text-xs sm:text-sm font-black bg-indigo-100 text-indigo-950 px-3 py-1 rounded-full shrink-0">
+        目前選擇：萬字夾
+      </span>
+    </div>
+
+    <!-- 正中央舞台：天平在正中央 + 平衡時彈出填空信息與「顯示答案」按鈕 + 下方純圖像化數量檢視區 -->
+    <div class="flex-1 bg-white rounded-3xl p-2.5 sm:p-4 shadow-lg border-4 border-emerald-300 flex flex-col items-center justify-between relative min-h-[275px]">
+      
+      <!-- 老師智能提示橫幅（單位過重或加入過量時彈出） -->
+      <div id="p2-hint-banner" class="hidden w-full max-w-4xl py-2 px-4 rounded-2xl border-2 text-center font-black text-sm sm:text-base lg:text-lg shadow-sm animate-pop z-10"></div>
+
+      <!-- 當天平完全平衡時彈出的互動信息框：「物件重＿＿ 個［自訂單位SVG圖片］？」 + 右方「顯示答案」按鈕 -->
+      <div id="p2-balance-question-box" class="hidden w-full max-w-4xl py-2 px-4 rounded-2xl bg-emerald-50 border-2 border-emerald-500 shadow-md animate-pop z-10 flex flex-wrap items-center justify-center sm:justify-between gap-3">
+        <div class="flex items-center flex-wrap justify-center gap-1.5 text-base sm:text-xl lg:text-2xl font-black text-emerald-950">
+          <span>🎉 天平平衡了！</span>
+          <span id="p2-q-obj-name">物件</span><span>重</span>
+          <span id="p2-q-blank" class="inline-block min-w-[68px] text-center border-b-4 border-[#1E293B] px-2 tracking-widest">&nbsp;&nbsp;&nbsp;&nbsp;</span>
+          <span>個</span>
+          <span id="p2-q-unit-img" class="inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 bg-white rounded-xl border border-emerald-300 p-1 shadow-2xs"></span>
+          <span id="p2-q-punct">？</span>
+        </div>
+
+        <button id="p2-show-answer-btn" onclick="revealPage2Answer()"
+          class="px-5 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-black text-base sm:text-lg shadow-md border-b-4 border-indigo-800 flex items-center gap-1.5 cursor-pointer transition">
+          <span>💡</span>
+          <span>顯示答案</span>
+        </button>
+      </div>
+
+      <!-- 正中央 SVG 天平 -->
+      <div class="w-full max-w-xl flex-1 flex items-center justify-center max-h-[225px] sm:max-h-[260px]">
+        <svg id="p2-svg" viewBox="0 0 600 285" class="w-full h-full max-h-[255px] overflow-visible">
+          <!-- 底座與中央支柱 -->
+          <ellipse cx="300" cy="272" rx="175" ry="10" fill="rgba(120, 53, 15, 0.14)"/>
+          <rect x="175" y="248" width="250" height="22" rx="9" fill="url(#woodBase)" stroke="#78350f" stroke-width="2"/>
+          <rect x="215" y="234" width="170" height="15" rx="6" fill="#b45309" stroke="#78350f" stroke-width="2"/>
+          <rect x="288" y="88" width="24" height="147" rx="4" fill="url(#steelPillar)" stroke="#334155" stroke-width="2"/>
+
+          <!-- 中央刻度盤 -->
+          <path d="M 255 138 A 48 48 0 0 1 345 138" fill="#f8fafc" stroke="#475569" stroke-width="2.5"/>
+          <line id="p2-center-mark" x1="300" y1="95" x2="300" y2="109" stroke="#10b981" stroke-width="4" stroke-linecap="round"/>
+          <line x1="272" y1="103" x2="278" y2="113" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+          <line x1="328" y1="103" x2="322" y2="113" stroke="#94a3b8" stroke-width="2" stroke-linecap="round"/>
+
+          <!-- 可旋轉橫樑 -->
+          <g id="p2-beam" class="scale-beam">
+            <rect x="115" y="85" width="370" height="14" rx="7" fill="url(#steelPillar)" stroke="#334155" stroke-width="2"/>
+            <circle cx="130" cy="92" r="6" fill="#f59e0b" stroke="#78350f" stroke-width="2"/>
+            <circle cx="470" cy="92" r="6" fill="#f59e0b" stroke="#78350f" stroke-width="2"/>
+          </g>
+
+          <!-- 指針 -->
+          <g id="p2-pointer" class="scale-pointer">
+            <polygon points="300,92 294,135 300,141 306,135" fill="#ef4444" stroke="#991b1b" stroke-width="1.5"/>
+          </g>
+          <circle cx="300" cy="92" r="11" fill="#fbbf24" stroke="#78350f" stroke-width="2.5"/>
+          <circle cx="300" cy="92" r="4" fill="#78350f"/>
+
+          <!-- 左盤：待測物件 -->
+          <g id="p2-left-pan" class="pan-assembly">
+            <line x1="130" y1="92" x2="70" y2="190" stroke="#64748b" stroke-width="2.5"/>
+            <line x1="130" y1="92" x2="190" y2="190" stroke="#64748b" stroke-width="2.5"/>
+            <g id="p2-left-slot" transform="translate(130, 158)"></g>
+            <path d="M 55 190 Q 130 215 205 190 Z" fill="url(#goldPan)" stroke="#92400e" stroke-width="2.5"/>
+            <rect x="50" y="186" width="160" height="7" rx="3.5" fill="#fef08a" stroke="#92400e" stroke-width="2"/>
+            <text id="p2-left-label" x="130" y="216" text-anchor="middle" font-size="14" font-weight="900" fill="#78350f">左盤：羽毛</text>
+          </g>
+
+          <!-- 右盤：自訂單位圖示堆疊區（不顯示數字文字） -->
+          <g id="p2-right-pan" class="pan-assembly">
+            <line x1="470" y1="92" x2="410" y2="190" stroke="#64748b" stroke-width="2.5"/>
+            <line x1="470" y1="92" x2="530" y2="190" stroke="#64748b" stroke-width="2.5"/>
+            <g id="p2-right-slot" transform="translate(470, 184)"></g>
+            <path d="M 395 190 Q 470 215 545 190 Z" fill="url(#goldPan)" stroke="#92400e" stroke-width="2.5"/>
+            <rect x="390" y="186" width="160" height="7" rx="3.5" fill="#fef08a" stroke="#92400e" stroke-width="2"/>
+            <text id="p2-right-label" x="470" y="216" text-anchor="middle" font-size="14" font-weight="900" fill="#78350f">右盤</text>
+          </g>
+        </svg>
+      </div>
+
+      <!-- 純圖像化已加入自訂單位數量檢視區（嚴格遵守：絕不寫出「XX粒波子」或數字計數器，一顆一顆排列圖示供學生點算） -->
+      <div class="w-full max-w-4xl bg-slate-50 rounded-2xl px-3.5 py-2 border-2 border-slate-200 flex flex-col sm:flex-row items-center gap-2 shrink-0">
+        <span class="text-xs sm:text-sm font-black text-[#1E293B] shrink-0">
+          👀 已加入的自訂單位圖示：
+        </span>
+        <div id="p2-visual-strip" class="flex-1 min-h-[42px] w-full bg-white rounded-xl px-2.5 py-1.5 border border-slate-200 flex flex-wrap items-center gap-1.5">
+          <span class="text-xs sm:text-sm text-slate-400 font-bold">（尚未放入任何自訂單位）</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下方電子白板大按鈕控制台（全部集中於畫面底部，方便矮小學生操作） -->
+    <div class="bg-amber-100/95 rounded-3xl p-2.5 sm:p-3.5 shadow-md border-2 border-amber-300 shrink-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 items-center">
+      
+      <!-- 區塊 1（5 欄）：切換 5 個待測物件 -->
+      <div class="lg:col-span-5 flex flex-col gap-1">
+        <span class="text-xs font-black text-amber-950 px-1">1. 選擇待測物件：</span>
+        <div id="p2-target-btns" class="grid grid-cols-5 gap-1.5">
+          <!-- JS 動態生成 5 個物件按鈕 -->
+        </div>
+      </div>
+
+      <!-- 區塊 2（3 欄）：選擇自訂單位（嚴格遵守：絕無任何「較輕」、「較重」、「適中」提示字眼） -->
+      <div class="lg:col-span-3 flex flex-col gap-1">
+        <span class="text-xs font-black text-amber-950 px-1">2. 選擇一款自訂單位：</span>
+        <div class="grid grid-cols-3 gap-1.5">
+          <button id="unit-choice-paperclip" onclick="chooseUnit('paperclip')"
+            class="p-2 rounded-2xl border-4 border-indigo-600 bg-white shadow-sm flex flex-col items-center justify-center gap-1 cursor-pointer transition active:scale-95">
+            <div class="w-8 h-8" id="preview-paperclip"></div>
+            <span class="font-black text-xs sm:text-sm text-[#1E293B]">萬字夾</span>
+          </button>
+
+          <button id="unit-choice-cube" onclick="chooseUnit('cube')"
+            class="p-2 rounded-2xl border-2 border-amber-300 bg-white/80 hover:bg-white flex flex-col items-center justify-center gap-1 cursor-pointer transition active:scale-95">
+            <div class="w-8 h-8" id="preview-cube"></div>
+            <span class="font-black text-xs sm:text-sm text-[#1E293B]">數粒</span>
+          </button>
+
+          <button id="unit-choice-marble" onclick="chooseUnit('marble')"
+            class="p-2 rounded-2xl border-2 border-amber-300 bg-white/80 hover:bg-white flex flex-col items-center justify-center gap-1 cursor-pointer transition active:scale-95">
+            <div class="w-8 h-8" id="preview-marble"></div>
+            <span class="font-black text-xs sm:text-sm text-[#1E293B]">波子</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 區塊 3（4 欄）：+ 加入 1 個 / - 移除 1 個 / 全部清除 -->
+      <div class="lg:col-span-4 flex flex-col gap-1">
+        <span class="text-xs font-black text-amber-950 px-1">3. 增減右盤自訂單位：</span>
+        <div class="grid grid-cols-3 gap-2">
+          <button id="btn-add-unit" onclick="addUnit()"
+            class="py-3 sm:py-3.5 px-2 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md border-b-4 border-emerald-800 flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer transition">
+            <span>+ 加入 1 個萬字夾</span>
+          </button>
+
+          <button id="btn-remove-unit" onclick="removeUnit()"
+            class="py-3 sm:py-3.5 px-2 rounded-2xl bg-amber-500 hover:bg-amber-400 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md border-b-4 border-amber-700 flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer transition">
+            <span>- 移除 1 個萬字夾</span>
+          </button>
+
+          <button onclick="clearAllUnits()"
+            class="py-3 sm:py-3.5 px-2 rounded-2xl bg-rose-500 hover:bg-rose-400 active:scale-95 text-white font-black text-xs sm:text-sm shadow-md border-b-4 border-rose-700 flex flex-col sm:flex-row items-center justify-center gap-1 cursor-pointer transition">
+            <span>清除全部</span>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 觸控拖曳懸浮分身 -->
+  <div id="touch-drag-ghost" class="hidden w-20 h-20"></div>
+
+  <script>
+    // ==================== Web Audio API 合成聲效與溫暖鋼琴/八音盒五聲音階背景音樂 ====================
+    let sfxEnabled = true;
+    let bgmEnabled = true;
+    let audioCtx = null;
+    let bgmTimer = null;
+    let bgmStep = 0;
+    let bgmStarted = false;
+
+    // 柔和溫暖的 C 大調五聲音階和弦循環旋律
+    const PENTATONIC_BGM = [
+      { notes: [523.25, 261.63], dur: 0.7 }, // C5 + C4
+      { notes: [659.25],         dur: 0.5 }, // E5
+      { notes: [783.99],         dur: 0.5 }, // G5
+      { notes: [659.25],         dur: 0.5 }, // E5
+      { notes: [587.33, 293.66], dur: 0.7 }, // D5 + D4
+      { notes: [783.99],         dur: 0.5 }, // G5
+      { notes: [880.00],         dur: 0.5 }, // A5
+      { notes: [783.99],         dur: 0.5 }, // G5
+      { notes: [659.25, 329.63], dur: 0.7 }, // E5 + E4
+      { notes: [587.33],         dur: 0.5 }, // D5
+      { notes: [523.25],         dur: 0.5 }, // C5
+      { notes: [587.33],         dur: 0.5 }, // D5
+      { notes: [523.25, 392.00], dur: 0.9 }, // C5 + G4
+      { notes: [783.99],         dur: 0.5 }, // G5
+      { notes: [659.25],         dur: 0.5 }, // E5
+      { notes: [523.25],         dur: 0.7 }  // C5
+    ];
+
+    function initAudio() {
+      try {
+        if (!audioCtx) {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            audioCtx = new AudioContextClass();
+          }
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        if (!bgmStarted && bgmEnabled && audioCtx) {
+          startBGMLoop();
+        }
+      } catch (err) {
+        console.warn('Web Audio API 初始化受限:', err);
+      }
+    }
+
+    // 首次點擊頁面任意處自動解鎖並啟動柔和背景音樂
+    document.addEventListener('pointerdown', function autoUnlockAudio() {
+      initAudio();
+      document.removeEventListener('pointerdown', autoUnlockAudio);
+    }, { once: true });
+
+    function startBGMLoop() {
+      if (bgmTimer) clearInterval(bgmTimer);
+      bgmStarted = true;
+      bgmTimer = setInterval(() => {
+        if (!bgmEnabled || !audioCtx || audioCtx.state !== 'running') return;
+        try {
+          const stepObj = PENTATONIC_BGM[bgmStep % PENTATONIC_BGM.length];
+          bgmStep++;
+
+          const now = audioCtx.currentTime;
+          stepObj.notes.forEach((freq, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now);
+
+            const peak = idx === 0 ? 0.04 : 0.024;
+            gain.gain.setValueAtTime(0.0005, now);
+            gain.gain.linearRampToValueAtTime(peak, now + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.0005, now + stepObj.dur + 0.25);
+
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now);
+            osc.stop(now + stepObj.dur + 0.28);
+          });
+        } catch (err) {
+          // 忽略單拍背景音樂播放異常
+        }
+      }, 650);
+    }
+
+    function toggleSFX() {
+      sfxEnabled = !sfxEnabled;
+      initAudio();
+      const icon = document.getElementById('sfx-icon');
+      const text = document.getElementById('sfx-text');
+      const btn = document.getElementById('sfx-toggle-btn');
+
+      if (sfxEnabled) {
+        icon.textContent = '🔊';
+        text.textContent = '音效：開';
+        btn.className = 'px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl bg-amber-400 hover:bg-amber-300 active:scale-95 text-emerald-950 font-black text-xs sm:text-sm shadow-md border-b-4 border-amber-600 flex items-center gap-1.5 cursor-pointer transition';
+        playSFX('click');
+      } else {
+        icon.textContent = '🔇';
+        text.textContent = '音效：關';
+        btn.className = 'px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl bg-slate-300 hover:bg-slate-200 active:scale-95 text-slate-700 font-black text-xs sm:text-sm shadow-md border-b-4 border-slate-500 flex items-center gap-1.5 cursor-pointer transition';
+      }
+    }
+
+    function toggleBGM() {
+      bgmEnabled = !bgmEnabled;
+      initAudio();
+      const icon = document.getElementById('bgm-icon');
+      const text = document.getElementById('bgm-text');
+      const btn = document.getElementById('bgm-toggle-btn');
+
+      if (bgmEnabled) {
+        icon.textContent = '🎵';
+        text.textContent = '背景音樂：開';
+        btn.className = 'px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl bg-sky-300 hover:bg-sky-200 active:scale-95 text-sky-950 font-black text-xs sm:text-sm shadow-md border-b-4 border-sky-500 flex items-center gap-1.5 cursor-pointer transition';
+        if (!bgmStarted) startBGMLoop();
+      } else {
+        icon.textContent = '🔕';
+        text.textContent = '背景音樂：關';
+        btn.className = 'px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl bg-slate-300 hover:bg-slate-200 active:scale-95 text-slate-700 font-black text-xs sm:text-sm shadow-md border-b-4 border-slate-500 flex items-center gap-1.5 cursor-pointer transition';
+      }
+      playSFX('click');
+    }
+
+    function playSFX(type) {
+      if (!sfxEnabled) return;
+      initAudio();
+      if (!audioCtx) return;
+
+      try {
+        const now = audioCtx.currentTime;
+
+        if (type === 'click') {
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(620, now);
+          osc.frequency.exponentialRampToValueAtTime(880, now + 0.07);
+          gain.gain.setValueAtTime(0.18, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.09);
+        } else if (type === 'woodDrop') {
+          // 放置物件的輕脆木琴/風鈴聲
+          [783.99, 1046.5].forEach((freq, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            const t = now + idx * 0.075;
+            osc.frequency.setValueAtTime(freq, t);
+            gain.gain.setValueAtTime(0.22, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(t);
+            osc.stop(t + 0.24);
+          });
+        } else if (type === 'remove') {
+          // 移除物件的柔和「啵」聲
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(480, now);
+          osc.frequency.exponentialRampToValueAtTime(220, now + 0.11);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.13);
+        } else if (type === 'balance') {
+          [523.25, 659.25, 783.99].forEach((freq, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            const t = now + idx * 0.1;
+            osc.frequency.setValueAtTime(freq, t);
+            gain.gain.setValueAtTime(0.22, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(t);
+            osc.stop(t + 0.36);
+          });
+        } else if (type === 'celebrate') {
+          [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'triangle';
+            const t = now + idx * 0.09;
+            osc.frequency.setValueAtTime(freq, t);
+            gain.gain.setValueAtTime(0.24, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(t);
+            osc.stop(t + 0.4);
+          });
+        } else if (type === 'warning') {
+          [330, 261.63].forEach((freq, idx) => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            const t = now + idx * 0.14;
+            osc.frequency.setValueAtTime(freq, t);
+            gain.gain.setValueAtTime(0.2, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(t);
+            osc.stop(t + 0.24);
+          });
+        }
+      } catch (err) {
+        // 忽略單次音效播放異常
+      }
+    }
+
+    // ==================== 精緻彩色內嵌 SVG 插畫 ====================
+    const SVG_LIB = {
+      // 第一部分 5 個日常物件
+      banana: `
+        <svg viewBox="0 0 80 60" class="w-full h-full overflow-visible">
+          <ellipse cx="40" cy="54" rx="26" ry="4" fill="rgba(0,0,0,0.14)"/>
+          <path d="M16 24 Q22 50 64 42 Q68 41 66 37 Q38 38 23 18 Z" fill="#facc15" stroke="#ca8a04" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M20 22 Q32 42 62 39" fill="none" stroke="#fef08a" stroke-width="2.5" stroke-linecap="round"/>
+          <path d="M16 24 L13 18 L19 16 L23 18 Z" fill="#78350f"/>
+          <circle cx="66" cy="39" r="2.2" fill="#78350f"/>
+        </svg>`,
+      toy_car: `
+        <svg viewBox="0 0 80 60" class="w-full h-full overflow-visible">
+          <ellipse cx="40" cy="54" rx="30" ry="4" fill="rgba(0,0,0,0.14)"/>
+          <path d="M14 36 L22 20 Q25 16 32 16 L48 16 Q54 16 58 22 L66 36 Z" fill="#ef4444" stroke="#991b1b" stroke-width="2"/>
+          <path d="M24 21 L38 21 L38 32 L19 32 Z" fill="#bae6fd" stroke="#0369a1" stroke-width="1.5"/>
+          <path d="M42 21 L54 21 L60 32 L42 32 Z" fill="#bae6fd" stroke="#0369a1" stroke-width="1.5"/>
+          <rect x="10" y="34" width="60" height="12" rx="5" fill="#dc2626" stroke="#991b1b" stroke-width="2"/>
+          <circle cx="66" cy="39" r="3" fill="#fef08a"/>
+          <circle cx="24" cy="46" r="8" fill="#1e293b" stroke="#0f172a" stroke-width="2"/>
+          <circle cx="24" cy="46" r="3.5" fill="#cbd5e1"/>
+          <circle cx="56" cy="46" r="8" fill="#1e293b" stroke="#0f172a" stroke-width="2"/>
+          <circle cx="56" cy="46" r="3.5" fill="#cbd5e1"/>
+        </svg>`,
+      pencil_case: `
+        <svg viewBox="0 0 80 60" class="w-full h-full overflow-visible">
+          <ellipse cx="40" cy="53" rx="32" ry="4" fill="rgba(0,0,0,0.14)"/>
+          <rect x="10" y="24" width="60" height="26" rx="10" fill="#3b82f6" stroke="#1d4ed8" stroke-width="2"/>
+          <path d="M10 33 L70 33" stroke="#1e40af" stroke-width="2.5" stroke-dasharray="4 2"/>
+          <rect x="54" y="29" width="8" height="8" rx="2" fill="#fbbf24" stroke="#b45309" stroke-width="1.5"/>
+          <circle cx="25" cy="41" r="3" fill="#93c5fd"/>
+          <circle cx="38" cy="41" r="3" fill="#93c5fd"/>
+          <circle cx="51" cy="41" r="3" fill="#93c5fd"/>
+        </svg>`,
+      notebook: `
+        <svg viewBox="0 0 80 65" class="w-full h-full overflow-visible">
+          <ellipse cx="40" cy="60" rx="26" ry="4" fill="rgba(0,0,0,0.14)"/>
+          <rect x="20" y="10" width="42" height="48" rx="4" fill="#10b981" stroke="#047857" stroke-width="2"/>
+          <rect x="28" y="18" width="26" height="14" rx="2" fill="#ffffff" stroke="#059669" stroke-width="1.5"/>
+          <line x1="32" y1="23" x2="50" y2="23" stroke="#64748b" stroke-width="2"/>
+          <line x1="32" y1="28" x2="45" y2="28" stroke="#64748b" stroke-width="2"/>
+          <circle cx="19" cy="17" r="3" fill="none" stroke="#334155" stroke-width="2"/>
+          <circle cx="19" cy="27" r="3" fill="none" stroke="#334155" stroke-width="2"/>
+          <circle cx="19" cy="37" r="3" fill="none" stroke="#334155" stroke-width="2"/>
+          <circle cx="19" cy="47" r="3" fill="none" stroke="#334155" stroke-width="2"/>
+        </svg>`,
+      doll: `
+        <svg viewBox="0 0 80 70" class="w-full h-full overflow-visible">
+          <ellipse cx="40" cy="65" rx="22" ry="4" fill="rgba(0,0,0,0.14)"/>
+          <circle cx="22" cy="22" r="8" fill="#78350f"/>
+          <circle cx="58" cy="22" r="8" fill="#78350f"/>
+          <circle cx="25" cy="18" r="3" fill="#f43f5e"/>
+          <circle cx="55" cy="18" r="3" fill="#f43f5e"/>
+          <path d="M30 34 L50 34 L58 56 L22 56 Z" fill="#f472b6" stroke="#be185d" stroke-width="2" stroke-linejoin="round"/>
+          <line x1="28" y1="38" x2="18" y2="46" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+          <line x1="52" y1="38" x2="62" y2="46" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+          <line x1="34" y1="56" x2="34" y2="63" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+          <line x1="46" y1="56" x2="46" y2="63" stroke="#fed7aa" stroke-width="5" stroke-linecap="round"/>
+          <circle cx="40" cy="22" r="13" fill="#fed7aa" stroke="#ea580c" stroke-width="1.5"/>
+          <path d="M27 20 Q40 8 53 20" fill="#78350f"/>
+          <circle cx="35" cy="22" r="2" fill="#1e293b"/>
+          <circle cx="45" cy="22" r="2" fill="#1e293b"/>
+          <path d="M37 27 Q40 30 43 27" fill="none" stroke="#e11d48" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>`,
+
+      // 第二部分 5 個待測物件：羽毛、紙飛機、擦膠、膠水、蘋果
+      feather: `
+        <svg viewBox="0 0 70 60" class="w-full h-full overflow-visible">
+          <path d="M14 48 Q26 16 56 12 Q52 38 22 44 Z" fill="#fef08a" stroke="#eab308" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M10 52 Q32 32 54 14" fill="none" stroke="#ca8a04" stroke-width="2.2" stroke-linecap="round"/>
+          <path d="M32 23 L27 18 M42 18 L38 13 M36 33 L42 36" stroke="#eab308" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>`,
+      paper_plane: `
+        <svg viewBox="0 0 70 60" class="w-full h-full overflow-visible">
+          <polygon points="8,32 62,12 46,50 32,37" fill="#f8fafc" stroke="#475569" stroke-width="2" stroke-linejoin="round"/>
+          <polygon points="32,37 62,12 38,42" fill="#cbd5e1" stroke="#475569" stroke-width="1.5" stroke-linejoin="round"/>
+          <polygon points="32,37 38,42 34,50" fill="#94a3b8" stroke="#475569" stroke-width="1.5" stroke-linejoin="round"/>
+        </svg>`,
+      eraser: `
+        <svg viewBox="0 0 70 60" class="w-full h-full overflow-visible">
+          <g transform="rotate(-18 35 32)">
+            <rect x="14" y="20" width="42" height="24" rx="5" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+            <rect x="24" y="20" width="24" height="24" fill="#3b82f6" stroke="#1d4ed8" stroke-width="2"/>
+            <line x1="29" y1="27" x2="43" y2="27" stroke="#bfdbfe" stroke-width="2" stroke-linecap="round"/>
+          </g>
+        </svg>`,
+      glue: `
+        <svg viewBox="0 0 70 65" class="w-full h-full overflow-visible">
+          <rect x="24" y="22" width="22" height="34" rx="4" fill="#a855f7" stroke="#6b21a8" stroke-width="2"/>
+          <rect x="26" y="28" width="18" height="16" rx="2" fill="#fef08a"/>
+          <rect x="26" y="13" width="18" height="9" rx="2" fill="#f97316" stroke="#9a3412" stroke-width="2"/>
+          <rect x="24" y="53" width="22" height="5" rx="2" fill="#e2e8f0" stroke="#475569" stroke-width="1.5"/>
+        </svg>`,
+      apple: `
+        <svg viewBox="0 0 70 65" class="w-full h-full overflow-visible">
+          <path d="M35 16 Q38 8 44 10" fill="none" stroke="#78350f" stroke-width="3" stroke-linecap="round"/>
+          <path d="M36 14 Q46 8 50 15 Q42 18 36 14 Z" fill="#22c55e" stroke="#15803d" stroke-width="1.5"/>
+          <path d="M35 20 C22 14, 12 26, 15 41 C18 54, 28 58, 35 55 C42 58, 52 54, 55 41 C58 26, 48 14, 35 20 Z" fill="#ef4444" stroke="#991b1b" stroke-width="2"/>
+          <path d="M22 26 Q20 33 23 39" fill="none" stroke="#fca5a5" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>`,
+
+      // 三款自訂單位
+      paperclip: `
+        <svg viewBox="0 0 40 40" class="w-full h-full overflow-visible">
+          <path d="M14 13 L14 28 A6 6 0 0 0 26 28 L26 11 A4 4 0 0 0 18 11 L18 26 A2 2 0 0 0 22 26 L22 14"
+                fill="none" stroke="#475569" stroke-width="2.8" stroke-linecap="round"/>
+        </svg>`,
+      cube: `
+        <svg viewBox="0 0 40 40" class="w-full h-full overflow-visible">
+          <polygon points="20,6 33,13 20,20 7,13" fill="#fb923c" stroke="#9a3412" stroke-width="1.8" stroke-linejoin="round"/>
+          <polygon points="7,13 20,20 20,34 7,27" fill="#f97316" stroke="#9a3412" stroke-width="1.8" stroke-linejoin="round"/>
+          <polygon points="33,13 20,20 20,34 33,27" fill="#ea580c" stroke="#9a3412" stroke-width="1.8" stroke-linejoin="round"/>
+        </svg>`,
+      marble: `
+        <svg viewBox="0 0 40 40" class="w-full h-full overflow-visible">
+          <defs>
+            <radialGradient id="marbleShiny" cx="35%" cy="30%" r="65%">
+              <stop offset="0%" stop-color="#e0f2fe"/>
+              <stop offset="45%" stop-color="#0284c7"/>
+              <stop offset="100%" stop-color="#1e3a8a"/>
+            </radialGradient>
+          </defs>
+          <circle cx="20" cy="20" r="14" fill="url(#marbleShiny)" stroke="#1e3a8a" stroke-width="1.8"/>
+          <path d="M12 22 Q20 14 28 22 Q20 28 12 22 Z" fill="rgba(56, 189, 248, 0.65)"/>
+          <ellipse cx="15" cy="13" rx="3.5" ry="2" transform="rotate(-30 15 13)" fill="#ffffff" opacity="0.85"/>
+        </svg>`
+    };
+
+    // ==================== 課程數據設定 ====================
+    // 第一部分：5 個日常物件（筆袋與筆記本同為 180，確保有一組平衡組合）
+    const P1_ITEMS = [
+      { id: 'banana',      name: '香蕉',   weight: 120, svg: SVG_LIB.banana },
+      { id: 'toy_car',     name: '玩具車', weight: 150, svg: SVG_LIB.toy_car },
+      { id: 'pencil_case', name: '筆袋',   weight: 180, svg: SVG_LIB.pencil_case },
+      { id: 'notebook',    name: '筆記本', weight: 180, svg: SVG_LIB.notebook },
+      { id: 'doll',        name: '洋娃娃', weight: 250, svg: SVG_LIB.doll }
+    ];
+
+    // 第二部分：三款自訂單位（萬字夾 = 3, 數粒 = 8, 波子 = 25，確保 5 個待測物件皆為嚴格唯一整數解，任何錯誤單位在任何數量下都無法平衡）
+    const P2_UNITS = {
+      paperclip: { id: 'paperclip', name: '萬字夾', weight: 3,  svg: SVG_LIB.paperclip },
+      cube:      { id: 'cube',      name: '數粒',   weight: 8,  svg: SVG_LIB.cube },
+      marble:    { id: 'marble',    name: '波子',   weight: 25, svg: SVG_LIB.marble }
+    };
+
+    // 第二部分：5 個待測物件（12, 21, 32, 56, 100 各自僅能被唯一一款自訂單位整除）
+    const P2_TARGETS = [
+      { id: 'feather',     name: '羽毛',   weight: 12,  bestUnit: 'paperclip', answerCount: 4, svg: SVG_LIB.feather },     // 4 個萬字夾 (4×3=12；無法被8或25整除)
+      { id: 'paper_plane', name: '紙飛機', weight: 21,  bestUnit: 'paperclip', answerCount: 7, svg: SVG_LIB.paper_plane }, // 7 個萬字夾 (7×3=21；無法被8或25整除)
+      { id: 'eraser',      name: '擦膠',   weight: 32,  bestUnit: 'cube',      answerCount: 4, svg: SVG_LIB.eraser },      // 4 個數粒 (4×8=32；無法被3或25整除)
+      { id: 'glue',        name: '膠水',   weight: 56,  bestUnit: 'cube',      answerCount: 7, svg: SVG_LIB.glue },        // 7 個數粒 (7×8=56；無法被3或25整除)
+      { id: 'apple',       name: '蘋果',   weight: 100, bestUnit: 'marble',    answerCount: 4, svg: SVG_LIB.apple }        // 4 個波子 (4×25=100；無法被3或8整除)
+    ];
+
+    // ==================== 狀態變數 ====================
+    let p1Left = null;
+    let p1Right = null;
+
+    let p2Target = P2_TARGETS[0];
+    let p2UnitKey = 'paperclip';
+    let p2Count = 0;
+
+    // ==================== 頁面初始化與分頁切換 ====================
+    window.onload = function () {
+      document.getElementById('preview-paperclip').innerHTML = SVG_LIB.paperclip;
+      document.getElementById('preview-cube').innerHTML = SVG_LIB.cube;
+      document.getElementById('preview-marble').innerHTML = SVG_LIB.marble;
+
+      renderP1Tray();
+      updateP1Scale();
+
+      renderP2TargetButtons();
+      updateP2TargetOnPan();
+      updateP2Scale();
+    };
+
+    function switchPage(pageNum) {
+      playSFX('click');
+      const p1 = document.getElementById('page-1');
+      const p2 = document.getElementById('page-2');
+      const t1 = document.getElementById('tab-1');
+      const t2 = document.getElementById('tab-2');
+
+      if (pageNum === 1) {
+        p1.classList.remove('hidden');
+        p1.classList.add('flex');
+        p2.classList.add('hidden');
+        p2.classList.remove('flex');
+        t1.className = 'flex-1 sm:flex-initial px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-xl font-black text-xs sm:text-sm lg:text-base transition bg-white text-emerald-900 shadow-sm cursor-pointer';
+        t1.setAttribute('aria-selected', 'true');
+        t2.className = 'flex-1 sm:flex-initial px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-xl font-black text-xs sm:text-sm lg:text-base transition text-emerald-100 hover:bg-emerald-800 cursor-pointer';
+        t2.setAttribute('aria-selected', 'false');
+      } else {
+        p1.classList.add('hidden');
+        p1.classList.remove('flex');
+        p2.classList.remove('hidden');
+        p2.classList.add('flex');
+        t2.className = 'flex-1 sm:flex-initial px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-xl font-black text-xs sm:text-sm lg:text-base transition bg-white text-emerald-900 shadow-sm cursor-pointer';
+        t2.setAttribute('aria-selected', 'true');
+        t1.className = 'flex-1 sm:flex-initial px-3.5 sm:px-5 py-1.5 sm:py-2 rounded-xl font-black text-xs sm:text-sm lg:text-base transition text-emerald-100 hover:bg-emerald-800 cursor-pointer';
+        t1.setAttribute('aria-selected', 'false');
+      }
+    }
+
+    // ==================== 天平物理角度與托盤垂直懸掛位移計算 ====================
+    // 橫樑支點在 (300, 92)，左右掛鉤距支點 170px
+    // 當橫樑旋轉 angle 度時，左右掛鉤的精確位移為 (dx, dy)，讓托盤組只做平移，懸吊桿與物件永遠保持垂直正立！
+    function getScaleKinematics(leftW, rightW) {
+      const diff = rightW - leftW;
+      if (Math.abs(diff) < 0.01) {
+        return { angle: 0, leftDx: 0, leftDy: 0, rightDx: 0, rightDy: 0, isBalanced: true };
+      }
+      const maxAngle = 15;
+      const sensitivity = 10;
+      const raw = (diff / (Math.abs(diff) + sensitivity)) * maxAngle;
+      const angle = diff > 0 ? Math.max(5.5, raw) : Math.min(-5.5, raw);
+      const rad = (angle * Math.PI) / 180;
+
+      const armLength = 170;
+      const rightDx = armLength * (Math.cos(rad) - 1);
+      const rightDy = armLength * Math.sin(rad);
+      const leftDx = -rightDx;
+      const leftDy = -rightDy;
+
+      return { angle, leftDx, leftDy, rightDx, rightDy, isBalanced: false };
+    }
+
+    // ==================== 第一部分：比較輕重 ====================
+    function renderP1Tray() {
+      const tray = document.getElementById('p1-tray');
+      tray.innerHTML = '';
+      const bothFull = Boolean(p1Left && p1Right);
+
+      P1_ITEMS.forEach(item => {
+        const onLeft = p1Left && p1Left.id === item.id;
+        const onRight = p1Right && p1Right.id === item.id;
+        const isDisabled = onLeft || onRight || bothFull;
+
+        const card = document.createElement('div');
+        card.draggable = !isDisabled;
+        card.className = `rounded-2xl p-2 sm:p-2.5 flex flex-col items-center justify-center transition-all border-2 ${
+          isDisabled
+            ? 'bg-slate-100 border-slate-300 opacity-45 cursor-not-allowed'
+            : 'bg-white border-amber-300 hover:border-amber-500 hover:shadow-md cursor-pointer active:scale-95'
+        }`;
+
+        if (!isDisabled) {
+          card.ondragstart = (e) => {
+            e.dataTransfer.setData('text/plain', item.id);
+          };
+          card.onclick = () => {
+            placeP1ItemAuto(item.id);
+          };
+          setupTouchDrag(card, item);
+        }
+
+        const badge = onLeft
+          ? '<span class="text-[11px] font-black text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full mt-0.5">在左盤</span>'
+          : onRight
+            ? '<span class="text-[11px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full mt-0.5">在右盤</span>'
+            : '';
+
+        // 嚴格遵守：無「放左邊/放右邊」按鈕，且在按下「顯示答案」前絕不顯示任何克數
+        card.innerHTML = `
+          <div class="w-11 h-10 sm:w-16 sm:h-13 flex items-center justify-center pointer-events-none">
+            ${item.svg}
+          </div>
+          <div class="font-black text-[#1E293B] text-xs sm:text-sm lg:text-base mt-1 pointer-events-none">${item.name}</div>
+          ${badge}
+        `;
+        tray.appendChild(card);
+      });
+    }
+
+    function setupTouchDrag(element, item) {
+      let isDragging = false;
+      const ghost = document.getElementById('touch-drag-ghost');
+
+      element.addEventListener('touchstart', (e) => {
+        if (e.touches.length !== 1) return;
+        isDragging = false;
+      }, { passive: true });
+
+      element.addEventListener('touchmove', (e) => {
+        if (e.touches.length !== 1) return;
+        e.preventDefault();
+        const touch = e.touches[0];
+        isDragging = true;
+        ghost.innerHTML = item.svg;
+        ghost.classList.remove('hidden');
+        ghost.style.left = `${touch.clientX}px`;
+        ghost.style.top = `${touch.clientY}px`;
+      }, { passive: false });
+
+      element.addEventListener('touchend', (e) => {
+        ghost.classList.add('hidden');
+        if (!isDragging) return;
+        const touch = e.changedTouches[0];
+        const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+        if (targetEl) {
+          if (targetEl.closest('#p1-left-pan')) {
+            placeP1Item(item.id, 'left');
+          } else if (targetEl.closest('#p1-right-pan')) {
+            placeP1Item(item.id, 'right');
+          }
+        }
+        isDragging = false;
+      });
+
+      element.addEventListener('touchcancel', () => {
+        ghost.classList.add('hidden');
+        isDragging = false;
+      });
+    }
+
+    function onDragOver(e, side) {
+      e.preventDefault();
+      if ((side === 'left' && p1Left) || (side === 'right' && p1Right)) return;
+      const z = document.getElementById(`p1-${side}-zone`);
+      z.classList.add('drop-active');
+      z.setAttribute('fill', 'rgba(59, 130, 246, 0.16)');
+    }
+
+    function onDragLeave(side) {
+      const z = document.getElementById(`p1-${side}-zone`);
+      z.classList.remove('drop-active');
+      z.setAttribute('fill', 'rgba(59, 130, 246, 0.04)');
+    }
+
+    function onDrop(e, side) {
+      e.preventDefault();
+      onDragLeave(side);
+      const id = e.dataTransfer.getData('text/plain');
+      if (id) placeP1Item(id, side);
+    }
+
+    // 預設第一個點選的物件放在左邊，第二個點選的物件放在右邊；兩邊放滿後須按「清空天平」才能重選
+    function placeP1ItemAuto(id) {
+      if (p1Left && p1Right) return;
+      if (!p1Left) {
+        placeP1Item(id, 'left');
+      } else if (!p1Right) {
+        placeP1Item(id, 'right');
+      }
+    }
+
+    function placeP1Item(id, side) {
+      if (p1Left && p1Right) return;
+      const item = P1_ITEMS.find(i => i.id === id);
+      if (!item) return;
+      if ((p1Left && p1Left.id === id) || (p1Right && p1Right.id === id)) return;
+
+      if (side === 'left') {
+        if (p1Left) return;
+        p1Left = item;
+      } else {
+        if (p1Right) return;
+        p1Right = item;
+      }
+
+      hideP1Answer();
+      renderP1Tray();
+      updateP1Scale();
+
+      if (p1Left && p1Right && p1Left.weight === p1Right.weight) {
+        playSFX('balance');
+      } else {
+        playSFX('woodDrop');
+      }
+    }
+
+    function resetPage1() {
+      playSFX('remove');
+      p1Left = null;
+      p1Right = null;
+      hideP1Answer();
+      renderP1Tray();
+      updateP1Scale();
+    }
+
+    function hideP1Answer() {
+      const box = document.getElementById('p1-answer-box');
+      if (box) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+      }
+    }
+
+    // 中性狀態徽章，絕不洩漏輕重線索，僅顯示純視覺狀態與操作指引
+    function updateP1StatusBadge() {
+      const badge = document.getElementById('p1-status-badge');
+      if (p1Left && p1Right) {
+        const stateText = p1Left.weight === p1Right.weight ? '天平保持平衡' : '天平已傾斜';
+        badge.textContent = `左盤：${p1Left.name} ｜ 右盤：${p1Right.name}（${stateText}，按「清空天平」重新配搭）`;
+      } else if (p1Left) {
+        badge.textContent = `左盤：${p1Left.name} ｜ 右盤：空（請再點選第二個物件放右盤）`;
+      } else if (p1Right) {
+        badge.textContent = `左盤：空 ｜ 右盤：${p1Right.name}（請再點選一個物件放左盤）`;
+      } else {
+        badge.textContent = `左盤：空 ｜ 右盤：空（請點選第一個物件放左盤）`;
+      }
+    }
+
+    function updateP1Scale() {
+      const leftW = p1Left ? p1Left.weight : 0;
+      const rightW = p1Right ? p1Right.weight : 0;
+      const { angle, leftDx, leftDy, rightDx, rightDy, isBalanced } = getScaleKinematics(leftW, rightW);
+
+      document.getElementById('p1-beam').style.transform = `rotate(${angle}deg)`;
+      document.getElementById('p1-pointer').style.transform = `rotate(${angle}deg)`;
+      document.getElementById('p1-left-pan').style.transform = `translate(${leftDx}px, ${leftDy}px)`;
+      document.getElementById('p1-right-pan').style.transform = `translate(${rightDx}px, ${rightDy}px)`;
+
+      // 中央對齊標記在平衡時柔和亮起綠色
+      const centerMark = document.getElementById('p1-center-mark');
+      centerMark.setAttribute('stroke', isBalanced ? '#10b981' : '#94a3b8');
+
+      const leftSlot = document.getElementById('p1-left-slot');
+      leftSlot.innerHTML = p1Left ? `
+        <g class="animate-pop">
+          <svg x="-42" y="-36" width="84" height="68">${p1Left.svg}</svg>
+          <rect x="-44" y="-56" width="88" height="22" rx="11" fill="#1E293B"/>
+          <text x="0" y="-41" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">${p1Left.name}</text>
+        </g>` : '';
+
+      const rightSlot = document.getElementById('p1-right-slot');
+      rightSlot.innerHTML = p1Right ? `
+        <g class="animate-pop">
+          <svg x="-42" y="-36" width="84" height="68">${p1Right.svg}</svg>
+          <rect x="-44" y="-56" width="88" height="22" rx="11" fill="#1E293B"/>
+          <text x="0" y="-41" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">${p1Right.name}</text>
+        </g>` : '';
+
+      // 只有當左右兩盤皆放有物件時，才顯示醒目的「顯示答案」按鈕
+      const revealBtn = document.getElementById('p1-reveal-btn');
+      if (p1Left && p1Right) {
+        revealBtn.classList.remove('hidden');
+        revealBtn.classList.add('flex');
+      } else {
+        revealBtn.classList.add('hidden');
+        revealBtn.classList.remove('flex');
+      }
+
+      updateP1StatusBadge();
+    }
+
+    // 按下「顯示答案」後，彈出清晰的教學解說卡（全程不顯示任何公認單位 g 或數字）
+    function revealPage1Answer() {
+      if (!p1Left || !p1Right) return;
+      playSFX('celebrate');
+
+      const box = document.getElementById('p1-answer-box');
+      box.classList.remove('hidden');
+
+      if (p1Left.weight > p1Right.weight) {
+        box.innerHTML = `✅ 觀察天平：左邊的<span class="text-rose-700">${p1Left.name}</span>天平向<span class="text-rose-700 underline">下降</span>，所以<span class="text-rose-700">${p1Left.name}</span>較重；右邊的<span class="text-sky-700">${p1Right.name}</span>天平向<span class="text-sky-700 underline">上升</span>，所以<span class="text-sky-700">${p1Right.name}</span>較輕。`;
+      } else if (p1Right.weight > p1Left.weight) {
+        box.innerHTML = `✅ 觀察天平：右邊的<span class="text-rose-700">${p1Right.name}</span>天平向<span class="text-rose-700 underline">下降</span>，所以<span class="text-rose-700">${p1Right.name}</span>較重；左邊的<span class="text-sky-700">${p1Left.name}</span>天平向<span class="text-sky-700 underline">上升</span>，所以<span class="text-sky-700">${p1Left.name}</span>較輕。`;
+      } else {
+        box.innerHTML = `✅ 觀察天平：左右兩邊保持<span class="text-emerald-700 underline">平衡</span>，所以<span class="text-emerald-700">${p1Left.name}</span>和<span class="text-emerald-700">${p1Right.name}</span>一樣重。`;
+      }
+    }
+
+    // ==================== 第二部分：自訂單位量度 ====================
+    function renderP2TargetButtons() {
+      const container = document.getElementById('p2-target-btns');
+      container.innerHTML = '';
+
+      P2_TARGETS.forEach(t => {
+        const active = p2Target.id === t.id;
+        const btn = document.createElement('button');
+        btn.onclick = () => selectP2Target(t.id);
+        btn.className = `p-1.5 sm:p-2 rounded-2xl border-2 flex flex-col items-center justify-center gap-1 cursor-pointer transition active:scale-95 ${
+          active
+            ? 'bg-emerald-600 border-emerald-800 text-white shadow-sm scale-105'
+            : 'bg-white border-amber-300 hover:bg-emerald-50 text-[#1E293B]'
+        }`;
+        btn.innerHTML = `
+          <div class="w-8 h-8 bg-white rounded-lg p-0.5 flex items-center justify-center">${t.svg}</div>
+          <span class="font-black text-xs sm:text-sm leading-none">${t.name}</span>
+        `;
+        container.appendChild(btn);
+      });
+    }
+
+    function selectP2Target(id) {
+      playSFX('click');
+      p2Target = P2_TARGETS.find(t => t.id === id);
+      p2Count = 0;
+      hideP2AllBanners();
+      renderP2TargetButtons();
+      updateP2TargetOnPan();
+      updateP2Scale();
+    }
+
+    function chooseUnit(unitKey) {
+      playSFX('click');
+      p2UnitKey = unitKey;
+      p2Count = 0; // 每次只能選擇一款自訂單位，切換時自動清空原有單位
+      hideP2AllBanners();
+
+      ['paperclip', 'cube', 'marble'].forEach(k => {
+        const btn = document.getElementById(`unit-choice-${k}`);
+        if (k === unitKey) {
+          btn.className = 'p-2 rounded-2xl border-4 border-indigo-600 bg-white shadow-sm flex flex-col items-center justify-center gap-1 cursor-pointer transition scale-105';
+        } else {
+          btn.className = 'p-2 rounded-2xl border-2 border-amber-300 bg-white/80 hover:bg-white flex flex-col items-center justify-center gap-1 cursor-pointer transition';
+        }
+      });
+
+      const unitObj = P2_UNITS[unitKey];
+      document.getElementById('p2-unit-badge').textContent = `目前選擇：${unitObj.name}`;
+      document.getElementById('btn-add-unit').innerHTML = `<span>+ 加入 1 個${unitObj.name}</span>`;
+      document.getElementById('btn-remove-unit').innerHTML = `<span>- 移除 1 個${unitObj.name}</span>`;
+      updateP2Scale();
+    }
+
+    function addUnit() {
+      const unitObj = P2_UNITS[p2UnitKey];
+      const leftW = p2Target.weight;
+      const rightW = p2Count * unitObj.weight;
+
+      // 允許最多加入至 12 個讓學生親身體驗「加入過量不適合量度」的狀態；達到 12 個且仍未平衡時阻擋繼續無止境堆疊
+      if (p2Count >= 12 && rightW < leftW) {
+        playSFX('warning');
+        showP2HintBanner('warning', '💡 老師提示：你已經放了很多個了，天平還未平衡（數量太多不方便點算），這個自訂單位太輕了，試試更換另一款自訂單位吧！');
+        return;
+      }
+
+      p2Count += 1;
+      updateP2Scale();
+      checkP2EducationalHints();
+    }
+
+    function removeUnit() {
+      if (p2Count <= 0) return;
+      playSFX('remove');
+      p2Count -= 1;
+      hideP2AllBanners();
+      updateP2Scale();
+      checkP2BalanceAfterRemove();
+    }
+
+    function clearAllUnits() {
+      playSFX('remove');
+      p2Count = 0;
+      hideP2AllBanners();
+      updateP2Scale();
+    }
+
+    function updateP2TargetOnPan() {
+      const slot = document.getElementById('p2-left-slot');
+      slot.innerHTML = `
+        <g class="animate-pop">
+          <svg x="-40" y="-34" width="80" height="64">${p2Target.svg}</svg>
+          <rect x="-40" y="-54" width="80" height="22" rx="11" fill="#065f46"/>
+          <text x="0" y="-39" text-anchor="middle" font-size="13" font-weight="bold" fill="#ffffff">${p2Target.name}</text>
+        </g>
+      `;
+      document.getElementById('p2-left-label').textContent = `左盤：${p2Target.name}`;
+    }
+
+    function updateP2Scale() {
+      const unitObj = P2_UNITS[p2UnitKey];
+      const leftW = p2Target.weight;
+      const rightW = p2Count * unitObj.weight;
+      const { angle, leftDx, leftDy, rightDx, rightDy, isBalanced } = getScaleKinematics(leftW, rightW);
+
+      document.getElementById('p2-beam').style.transform = `rotate(${angle}deg)`;
+      document.getElementById('p2-pointer').style.transform = `rotate(${angle}deg)`;
+      document.getElementById('p2-left-pan').style.transform = `translate(${leftDx}px, ${leftDy}px)`;
+      document.getElementById('p2-right-pan').style.transform = `translate(${rightDx}px, ${rightDy}px)`;
+
+      const centerMark = document.getElementById('p2-center-mark');
+      centerMark.setAttribute('stroke', isBalanced ? '#10b981' : '#94a3b8');
+
+      // 更新右盤 SVG 托盤上的堆疊小圖示（絕不顯示數字文字）
+      const rightSlot = document.getElementById('p2-right-slot');
+      rightSlot.innerHTML = '';
+      const visualPanCount = Math.min(p2Count, 24);
+      const cols = 4;
+      for (let i = 0; i < visualPanCount; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const offsetX = (col - 1.5) * 26 + (row % 2 === 1 ? 5 : 0);
+        const offsetY = -20 - row * 16;
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.setAttribute('transform', `translate(${offsetX}, ${offsetY})`);
+        g.innerHTML = `<svg x="-12" y="-12" width="24" height="24">${unitObj.svg}</svg>`;
+        rightSlot.appendChild(g);
+      }
+      document.getElementById('p2-right-label').textContent = '右盤';
+
+      // 純圖像化已加入的自訂單位檢視區（絕不寫出「XX粒波子」或數字計數器，一顆一顆排列顯示）
+      const strip = document.getElementById('p2-visual-strip');
+      if (p2Count === 0) {
+        strip.innerHTML = `<span class="text-xs sm:text-sm text-slate-400 font-bold">（尚未放入任何自訂單位）</span>`;
+      } else {
+        strip.innerHTML = '';
+        for (let i = 0; i < p2Count; i++) {
+          const pic = document.createElement('div');
+          pic.className = 'w-8 h-8 sm:w-9 sm:h-9 bg-amber-50 border border-amber-300 rounded-lg p-0.5 flex items-center justify-center shadow-2xs animate-pop';
+          pic.innerHTML = unitObj.svg;
+          strip.appendChild(pic);
+        }
+      }
+    }
+
+    function checkP2EducationalHints() {
+      const unitObj = P2_UNITS[p2UnitKey];
+      const leftW = p2Target.weight;
+      const rightW = p2Count * unitObj.weight;
+
+      // 1. 加入 1 個自訂單位後，右盤就已經比左盤物件重（單位過大／過重）
+      if (p2Count === 1 && rightW > leftW) {
+        playSFX('warning');
+        showP2HintBanner('warning', '💡 老師提示：只放 1 個就已經比物件重了，這個自訂單位不適合用來量度這件物件，試試更換另一款自訂單位吧！');
+        return;
+      }
+
+      // 2. 加入達到 10 個或以上仍未平衡（單位過輕、加入過量）
+      if (p2Count >= 10 && rightW < leftW) {
+        playSFX('warning');
+        showP2HintBanner('warning', '💡 老師提示：你已經放了很多個了，天平還未平衡（數量太多不方便點算），這個自訂單位太輕了，試試更換另一款自訂單位吧！');
+        return;
+      }
+
+      // 3. 天平左右兩邊達到完全平衡（唯一標準解）
+      if (Math.abs(rightW - leftW) < 0.01) {
+        playSFX('balance');
+        showP2BalanceQuestion();
+        return;
+      }
+
+      // 4. 超過 1 個後變得偏重（跨過平衡點）
+      if (p2Count > 1 && rightW > leftW) {
+        playSFX('warning');
+        if (p2UnitKey !== p2Target.bestUnit) {
+          showP2HintBanner('info', '⚖️ 右邊變得較重了，用這個自訂單位無法準確使天平平衡，請按「清除全部」並改用其他自訂單位吧！');
+        } else {
+          showP2HintBanner('info', '⚖️ 右邊多放了 1 個所以偏重了，請按「- 移除 1 個」試試看！');
+        }
+        return;
+      }
+
+      playSFX('woodDrop');
+      hideP2AllBanners();
+    }
+
+    function checkP2BalanceAfterRemove() {
+      const unitObj = P2_UNITS[p2UnitKey];
+      const leftW = p2Target.weight;
+      const rightW = p2Count * unitObj.weight;
+
+      if (p2Count > 0 && Math.abs(rightW - leftW) < 0.01) {
+        playSFX('balance');
+        showP2BalanceQuestion();
+      } else if (p2Count >= 10 && rightW < leftW) {
+        showP2HintBanner('warning', '💡 老師提示：你已經放了很多個了，天平還未平衡（數量太多不方便點算），這個自訂單位太輕了，試試更換另一款自訂單位吧！');
+      }
+    }
+
+    // 當天平完全平衡時，彈出「物件重＿＿ 個［自訂單位SVG圖片］？」及右方「顯示答案」按鈕（絕不寫出中文字單位名稱）
+    function showP2BalanceQuestion() {
+      document.getElementById('p2-hint-banner').classList.add('hidden');
+      const unitObj = P2_UNITS[p2UnitKey];
+
+      document.getElementById('p2-q-obj-name').textContent = p2Target.name;
+      const blankEl = document.getElementById('p2-q-blank');
+      blankEl.innerHTML = '&nbsp;&nbsp;&nbsp;&nbsp;';
+      blankEl.className = 'inline-block min-w-[68px] text-center border-b-4 border-[#1E293B] px-2 tracking-widest';
+
+      document.getElementById('p2-q-unit-img').innerHTML = unitObj.svg;
+      document.getElementById('p2-q-punct').textContent = '？';
+      document.getElementById('p2-q-punct').className = '';
+
+      const showAnsBtn = document.getElementById('p2-show-answer-btn');
+      showAnsBtn.classList.remove('hidden');
+
+      const qBox = document.getElementById('p2-balance-question-box');
+      qBox.classList.remove('hidden');
+    }
+
+    // 按下「顯示答案」按鈕後，在橫線上寫上鮮明紅色粗體字數量（#DC2626），並保持自訂單位圖片顯示
+    function revealPage2Answer() {
+      const unitObj = P2_UNITS[p2UnitKey];
+      if (p2Count <= 0 || Math.abs((p2Count * unitObj.weight) - p2Target.weight) >= 0.01) return;
+
+      playSFX('celebrate');
+      const blankEl = document.getElementById('p2-q-blank');
+      blankEl.textContent = p2Count;
+      blankEl.className = 'inline-block min-w-[68px] text-center border-b-4 border-[#DC2626] px-2 text-[#DC2626] font-black text-2xl sm:text-3xl animate-pop';
+
+      document.getElementById('p2-q-unit-img').innerHTML = unitObj.svg;
+      document.getElementById('p2-q-punct').textContent = '！';
+      document.getElementById('p2-q-punct').className = 'text-[#DC2626] font-black';
+      document.getElementById('p2-show-answer-btn').classList.add('hidden');
+    }
+
+    function showP2HintBanner(type, text) {
+      document.getElementById('p2-balance-question-box').classList.add('hidden');
+      const banner = document.getElementById('p2-hint-banner');
+      banner.classList.remove('hidden', 'bg-amber-50', 'border-amber-400', 'text-amber-950', 'bg-sky-50', 'border-sky-400', 'text-sky-950');
+
+      if (type === 'warning') {
+        banner.classList.add('bg-amber-50', 'border-amber-400', 'text-amber-950');
+      } else {
+        banner.classList.add('bg-sky-50', 'border-sky-400', 'text-sky-950');
+      }
+      banner.textContent = text;
+    }
+
+    function hideP2AllBanners() {
+      document.getElementById('p2-hint-banner').classList.add('hidden');
+      document.getElementById('p2-balance-question-box').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
